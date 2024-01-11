@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "./WhileOpen.sol";
-import "./WhileRelease.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {WhileOpen} from "./WhileOpen.sol";
+import {WhileRelease} from "./WhileRelease.sol";
 
 contract IDO is Ownable, WhileOpen, WhileRelease {
     using SafeERC20 for IERC20;
@@ -123,6 +123,7 @@ contract IDO is Ownable, WhileOpen, WhileRelease {
     }
 
     function withdrawEth(address to) external onlyOwner {
+        require(to != address(0), "Withdraw to the zero address");
         payable(to).transfer(address(this).balance);
     }
 

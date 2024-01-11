@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v4.7.0) (security/Pausable.sol)
 
-pragma solidity ^0.8.0;
-import "@openzeppelin/contracts/utils/Context.sol";
+pragma solidity 0.8.20;
+import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 
 abstract contract WhileRelease is Context {
     event WhileReleased(address account);
