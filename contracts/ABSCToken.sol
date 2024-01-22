@@ -5,6 +5,6 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract ABSCToken is ERC20 {
     constructor() ERC20("ABSC", "ABSC") {
-        _mint(msg.sender, 1000000 * 10 ** decimals());
+        _mint(msg.sender, 6000000000 * 10 ** decimals());
     }
 }

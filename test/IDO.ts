@@ -22,18 +22,23 @@ describe("IDO", function () {
     const maxAllocation = ethers.parseEther("10000");
     // 1 eth
     const minAllocation = ethers.parseEther("1");
-    // 100 倍 = 10000%
-    const tokenEthRate = 10000;
+    // 1
+    const stage = 1;
     const IDO = await ethers.getContractFactory("IDO");
-    const ido = await IDO.deploy(tokenAddress, tokenEthRate, maxAllocation, minAllocation);
-
-    return { ido, absc, owner, otherAccount,tokenEthRate, minAllocation,maxAllocation};
+    const ido = await IDO.deploy(tokenAddress, maxAllocation, minAllocation, stage);
+    const tokenEthRate1 = 32397408
+    const tokenEthRate2 = 29452189
+    const tokenEthRate3 = 26997840
+    await ido.setTokenEthRate(1, tokenEthRate1)
+    await ido.setTokenEthRate(2, tokenEthRate2)
+    await ido.setTokenEthRate(3,tokenEthRate3)
+    return { ido, absc, owner, otherAccount,stage, minAllocation,maxAllocation,tokenEthRate1,tokenEthRate2,tokenEthRate3};
   }
 
   describe("Deployment", function () {
-    it("Should set the right tokenEthRate", async function () {
-      const { ido, tokenEthRate } = await loadFixture(deployIDO);
-      expect(await ido.tokenEthRate()).to.equal(tokenEthRate);
+    it("Should set the right stage", async function () {
+      const { ido, stage } = await loadFixture(deployIDO);
+      expect(await ido.stage()).to.equal(stage);
     });
 
     it("Should set the right owner", async function () {
@@ -63,7 +68,7 @@ describe("IDO", function () {
 
     it("Should set the right ERC20", async function () {
       const { absc, owner } = await loadFixture(deployIDO);
-      expect(BigInt(await absc.balanceOf(owner.address))).to.equal(BigInt(1000000)*BigInt(10**18));
+      expect(BigInt(await absc.balanceOf(owner.address))).to.equal(BigInt(6000000000)*BigInt(10**18));
     });
   });
 
@@ -115,7 +120,7 @@ describe("IDO", function () {
         const { ido, otherAccount } = await loadFixture(deployIDO);
         const setTokenEthRate = 10000;
         // We use ido.connect() to send a transaction from another account
-        await expect(ido.connect(otherAccount).setTokenEthRate(setTokenEthRate)).to.be.revertedWith(
+        await expect(ido.connect(otherAccount).setTokenEthRate(1,setTokenEthRate)).to.be.revertedWith(
           "Ownable: caller is not the owner"
         );
       });
@@ -124,8 +129,8 @@ describe("IDO", function () {
       it("Execute success", async function () {
         const { ido } = await loadFixture(deployIDO);
         const setTokenEthRate = "20000";
-        await ido.setTokenEthRate(setTokenEthRate)
-        expect(await ido.tokenEthRate()).to.equal(setTokenEthRate);
+        await ido.setTokenEthRate(1,setTokenEthRate)
+        expect(await ido.tokenEthRate(1)).to.equal(setTokenEthRate);
       });
     });
   });
@@ -252,41 +257,30 @@ describe("IDO", function () {
           "Exceeds maximum purchase amount"
         );
       });
-      it("Should revert with the right error if called from when totalamount > maxAllocation", async function () {
-        const { ido } = await loadFixture(deployIDO);
-        const value = ethers.parseEther("6000");
-        await ido.open();
-        await ido.purchase({ value: value });
-        await expect(ido.purchase({value:value})).to.be.revertedWith(
-          "TokenSale: you try buy more than max allocation"
-        );
-      });
     });
     describe("Execute", function () {
       it("Should emit an event on PurchaseCompleted", async function () {
-         const { ido,owner} = await loadFixture(deployIDO);
+         const { ido,owner,stage} = await loadFixture(deployIDO);
         const value = ethers.parseEther("6000");
         await ido.open();
         await expect(ido.purchase({ value: value }))
           .to.emit(ido, "PurchaseCompleted")
-          .withArgs(owner.address, value); 
+          .withArgs(owner.address,stage, value); 
       });
       it("Should allocations[owner] == value1 + value2", async function () {
-        const { ido,owner} = await loadFixture(deployIDO);
+        const { ido,owner,stage} = await loadFixture(deployIDO);
         const value1 = ethers.parseEther("2000");
         const value2 = ethers.parseEther("3000");
         await ido.open();
         await ido.purchase({ value: value1 });
         await ido.purchase({ value: value2 });
-        expect(await ido.allocations(owner.address)).to.equal(value1 + value2); 
+        expect(await ido.allocations(stage,owner.address)).to.equal(value1 + value2); 
       });
       it("Should IDO eth balance == value1 + value2", async function () {
         const { ido,owner} = await loadFixture(deployIDO);
         const value1 = ethers.parseEther("2000");
         const value2 = ethers.parseEther("3000");
         await ido.open();
-        await ido.purchase({ value: value1 });
-        await ido.purchase({ value: value2 });
         await expect(ido.purchase({ value: value1 })).to.changeEtherBalances(
           [owner, ido],
           [ -value1, value1]
@@ -328,27 +322,55 @@ describe("IDO", function () {
     });
     describe("Execute", function () {
       it("Should emit an event on TokensClaimed", async function () {
-        const { ido, absc,otherAccount , tokenEthRate } = await loadFixture(deployIDO);
-        const value = ethers.parseEther("2000");
+        const { ido, absc,otherAccount ,stage} = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
         await ido.open();
         await ido.connect(otherAccount).purchase({ value: value });
         await ido.unopen();
-        await absc.transfer(ido.target, ethers.parseEther("500000"));
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
         await ido.release();
+        const tokenEthRate = await ido.tokenEthRate(stage)
         const claimAmount = value * BigInt(tokenEthRate) / BigInt(100);
         await expect(ido.connect(otherAccount).claim())
           .to.emit(ido, "TokensClaimed")
           .withArgs(otherAccount.address, claimAmount); 
       });
       it("Should transfer the funds to the user", async function () {
-        const { ido, absc,otherAccount , tokenEthRate } = await loadFixture(deployIDO);
-        const value = ethers.parseEther("2000");
+        const { ido, absc,otherAccount,stage } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
         await ido.open();
         await ido.connect(otherAccount).purchase({ value: value });
         await ido.unopen();
-        await absc.transfer(ido.target, ethers.parseEther("500000"));
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
         await ido.release();
+        const tokenEthRate = await ido.tokenEthRate(stage)
         const claimAmount = value * BigInt(tokenEthRate) / BigInt(100);
+        await expect(ido.connect(otherAccount).claim()).to.changeTokenBalances(
+          absc,
+          [otherAccount, ido],
+          [ claimAmount, -claimAmount]
+        );
+      });
+
+      it("Should transfer the funds to the user diff stage", async function () {
+        const { ido, absc,otherAccount,tokenEthRate1,tokenEthRate2,tokenEthRate3 } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await ido.setStage(2);
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await ido.setStage(3);
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
+        await ido.release();
+        const claimAmount = value * BigInt(tokenEthRate1) / BigInt(100)
+          + value * BigInt(tokenEthRate2) / BigInt(100)
+          + value * BigInt(tokenEthRate3) / BigInt(100);
         await expect(ido.connect(otherAccount).claim()).to.changeTokenBalances(
           absc,
           [otherAccount, ido],
@@ -369,6 +391,12 @@ describe("IDO", function () {
         [owner, ido],
         [ -etherValue, etherValue]
       );
+    });
+    it("Should transfer the amount to the IDO", async function () {
+      const { ido, absc, owner } = await loadFixture(deployIDO);
+      const etherValue = ethers.parseEther("500000");
+      await absc.transfer(ido.target, etherValue);
+      expect(await ido.getTokensBalance()).to.equal(etherValue);
     });
   });
 
@@ -408,8 +436,8 @@ describe("IDO", function () {
     });
     describe("Execute", function () {
       it("Execute success", async function () {
-        const { ido, absc, owner, otherAccount , tokenEthRate } = await loadFixture(deployIDO);
-        const value = ethers.parseEther("2000");
+        const { ido, absc, owner, otherAccount,stage } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
         await ido.open();
         await ido.connect(otherAccount).purchase({ value: value });
         await ido.unopen();
@@ -417,8 +445,8 @@ describe("IDO", function () {
         await absc.transfer(ido.target, tokenValue);
         await ido.release();
         await ido.connect(otherAccount).claim();
-        const claimAmount = value * BigInt(tokenEthRate) / BigInt(100);
-        const changeValue = tokenValue - claimAmount;
+        const erc20Amount = await ido.totalErc20Amount(stage)
+        const changeValue = tokenValue - erc20Amount;
         await expect(ido.withdrawTokens()).to.changeTokenBalances(
           absc,
           [owner, ido],
