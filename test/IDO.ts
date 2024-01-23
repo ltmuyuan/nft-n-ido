@@ -455,4 +455,94 @@ describe("IDO", function () {
       });
     });
   });
+
+
+  describe("Withdraw", function () {
+    describe("Validations", function () {
+      it("Should revert with the right error if called from when not released", async function () {
+        const { ido,otherAccount } = await loadFixture(deployIDO);
+         await expect(ido.connect(otherAccount).withdraw()).to.be.revertedWith(
+          "WhileWithdraw: not withdraw"
+        );
+      });
+      it("Should revert with the right error if called from when withdrawAmount <= 0 ", async function () {
+        const { ido, otherAccount } = await loadFixture(deployIDO);
+        await ido.setWithdraw();
+        await expect(ido.connect(otherAccount).withdraw()).to.be.revertedWith(
+          "No withdrawable amount available"
+        );
+      });
+      it("Should revert with the right error if called from when You have completed the claim", async function () {
+        const { ido,otherAccount,absc } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
+        await ido.release();
+        await ido.connect(otherAccount).claim()
+        await ido.setWithdraw();
+        await expect(ido.connect(otherAccount).withdraw()).to.be.revertedWith(
+          "You have completed the claim"
+        );
+      });
+
+      it("Should revert with the right error if called from when withdrawAmount <= 0", async function () {
+        const { ido,otherAccount,absc } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("2000");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
+        await ido.setWithdraw();
+        await ido.connect(otherAccount).withdraw();
+        await expect(ido.connect(otherAccount).withdraw()).to.be.revertedWith(
+          "No withdrawable amount available"
+        );
+      });
+      it("Should revert with the right error if called from when insufficient balance in the contract", async function () {
+        const { ido,owner,otherAccount,absc } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("2000");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await absc.transfer(ido.target, ethers.parseEther("4000000"));
+        await ido.withdrawEth(owner);
+        await ido.setWithdraw();
+        await expect(ido.connect(otherAccount).withdraw()).to.be.revertedWith(
+          "Insufficient balance in the contract"
+        );
+      });
+    });
+    describe("Execute", function () {
+      it("Should emit an event on WithdrawCompleted", async function () {
+        const { ido,otherAccount } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await ido.setWithdraw();
+        await expect(ido.connect(otherAccount).withdraw())
+          .to.emit(ido, "WithdrawCompleted")
+          .withArgs(otherAccount.address, value); 
+      });
+      it("Should transfer the funds to the user diff stage", async function () {
+        const { ido, absc, otherAccount, stage } = await loadFixture(deployIDO);
+        const value = ethers.parseEther("1");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value });
+        await ido.unopen();
+        await ido.setStage(2);
+        const value1 = ethers.parseEther("2");
+        await ido.open();
+        await ido.connect(otherAccount).purchase({ value: value1 });
+        await ido.unopen();
+        await ido.setWithdraw();
+        await expect(ido.connect(otherAccount).withdraw()).to.changeEtherBalances(
+          [otherAccount, ido],
+          [value + value1, -(value + value1)]
+        );
+      });
+    });
+  });
 });

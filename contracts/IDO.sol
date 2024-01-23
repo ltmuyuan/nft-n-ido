@@ -7,8 +7,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {WhileOpen} from "./WhileOpen.sol";
 import {WhileRelease} from "./WhileRelease.sol";
+import {WhileWithdraw} from "./WhileWithdraw.sol";
 
-contract IDO is Ownable, WhileOpen, WhileRelease {
+contract IDO is Ownable, WhileOpen, WhileRelease, WhileWithdraw {
     using SafeERC20 for IERC20;
 
     using SafeMath for uint256;
@@ -44,6 +45,8 @@ contract IDO is Ownable, WhileOpen, WhileRelease {
     );
 
     event TokensClaimed(address indexed user, uint256 indexed amount);
+
+    event WithdrawCompleted(address indexed user, uint256 indexed amount);
 
     constructor(
         address token_,
@@ -105,6 +108,16 @@ contract IDO is Ownable, WhileOpen, WhileRelease {
         _unrelease();
     }
 
+    // only admin set withdraw
+    function setWithdraw() external onlyOwner {
+        _setWithdraw();
+    }
+
+    // only admin set withdraw
+    function setUnWithdraw() external onlyOwner {
+        _setUnWithdraw();
+    }
+
     //user buy token
     function purchase() external payable whenOpened {
         require(msg.value >= minAllocation, "Below minimum purchase amount");
@@ -122,7 +135,7 @@ contract IDO is Ownable, WhileOpen, WhileRelease {
         emit PurchaseCompleted(msg.sender, stage, msg.value);
     }
 
-    function claim() external payable whenReleased {
+    function claim() external whenReleased {
         uint256 tokenAmount = 0;
         for (uint8 i = 1; i <= stage; i++) {
             tokenAmount = tokenAmount.add(erc20Allocations[i][msg.sender]);
@@ -138,6 +151,28 @@ contract IDO is Ownable, WhileOpen, WhileRelease {
         }
         token.safeTransfer(msg.sender, tokenAmount);
         emit TokensClaimed(msg.sender, tokenAmount);
+    }
+
+    function withdraw() external payable whenWithdraw {
+        uint256 ethAmount = 0;
+        uint256 tokenAmount = 0;
+        for (uint8 i = 1; i <= stage; i++) {
+            ethAmount = ethAmount.add(allocations[i][msg.sender]);
+            tokenAmount = tokenAmount.add(erc20Allocations[i][msg.sender]);
+        }
+        require(ethAmount > 0, "No withdrawable amount available");
+        require(tokenAmount > 0, "You have completed the claim");
+
+        require(
+            address(this).balance >= ethAmount,
+            "Insufficient balance in the contract"
+        );
+        for (uint8 i = 1; i <= stage; i++) {
+            erc20Allocations[i][msg.sender] = 0;
+            allocations[i][msg.sender] = 0;
+        }
+        payable(msg.sender).transfer(ethAmount);
+        emit WithdrawCompleted(msg.sender, ethAmount);
     }
 
     function getTokensBalance() public view returns (uint256 balance) {
